@@ -1,15 +1,10 @@
-import { Buffer } from 'buffer';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
-import AdmZip from 'adm-zip';
+const { Buffer } = require('buffer');
+const fs = require('fs').promises;
+const path = require('path');
+const AdmZip = require('adm-zip');
+const sharp = require('sharp');
 
-const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export const handler = async (event) => {
+exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -22,9 +17,13 @@ export const handler = async (event) => {
   const outputDir = path.join(tmpDir, `output-${Date.now()}`);
 
   try {
+    console.log('🚀 Function started');
+
     // Parse multipart form data
     const boundary = event.headers['content-type'].split('boundary=')[1];
     const parts = parseMultipart(Buffer.from(event.body, 'base64'), boundary);
+
+    console.log(`📦 Received ${parts.length} files`);
 
     // Create input directory
     await fs.mkdir(inputDir, { recursive: true });
@@ -36,9 +35,11 @@ export const handler = async (event) => {
         
         // If ZIP, extract it
         if (part.filename.endsWith('.zip')) {
+          console.log(`📂 Extracting ZIP: ${part.filename}`);
           const zip = new AdmZip(part.data);
           zip.extractAllTo(inputDir, true);
         } else {
+          console.log(`💾 Saving file: ${part.filename}`);
           await fs.writeFile(filePath, part.data);
         }
       }
@@ -47,13 +48,12 @@ export const handler = async (event) => {
     // Create output directory
     await fs.mkdir(outputDir, { recursive: true });
 
-    // Execute generate-images.cjs
-    const scriptPath = '/var/task/scripts/generate-images.cjs';
-    const generateImages = require(scriptPath);
-    
+    // Execute image generation
+    console.log('🖼️ Starting image generation...');
     await generateImages(inputDir, outputDir);
 
     // Create output ZIP
+    console.log('📦 Creating output ZIP...');
     const outputZip = new AdmZip();
     await addDirectoryToZip(outputZip, outputDir, '');
 
@@ -62,6 +62,8 @@ export const handler = async (event) => {
     // Cleanup
     await fs.rm(inputDir, { recursive: true, force: true });
     await fs.rm(outputDir, { recursive: true, force: true });
+
+    console.log('✅ Success');
 
     return {
       statusCode: 200,
@@ -74,8 +76,8 @@ export const handler = async (event) => {
     };
 
   } catch (error) {
-    console.error('Error:', error);
-    
+    console.error('❌ Error:', error);
+
     // Cleanup on error
     try {
       await fs.rm(inputDir, { recursive: true, force: true });
@@ -84,7 +86,7 @@ export const handler = async (event) => {
 
     return {
       statusCode: 500,
-      body: `Erreur de traitement : ${error.message}`
+      body: `Erreur : ${error.message}`
     };
   }
 };
@@ -94,7 +96,7 @@ function parseMultipart(buffer, boundary) {
   const parts = [];
   const delimiter = Buffer.from(`--${boundary}`);
   const sections = [];
-  
+
   let start = 0;
   while (true) {
     const pos = buffer.indexOf(delimiter, start);
@@ -138,5 +140,71 @@ async function addDirectoryToZip(zip, dirPath, zipPath) {
       const content = await fs.readFile(fullPath);
       zip.addFile(zipEntryPath, content);
     }
+  }
+}
+
+// Image generation function
+async function generateImages(inputDir, outputDir) {
+  const folders = [
+    'hero',
+    'features', 
+    'gallery',
+    'thumbnails',
+    'backgrounds',
+    'icons',
+    'misc'
+  ];
+
+  // Create folders
+  for (const folder of folders) {
+    await fs.mkdir(path.join(outputDir, folder), { recursive: true });
+  }
+
+  // Read images
+  const files = await fs.readdir(inputDir);
+  const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
+
+  console.log(`📷 Found ${imageFiles.length} images`);
+
+  if (imageFiles.length === 0) {
+    throw new Error('Aucune image trouvée');
+  }
+
+  // Sizes
+  const sizes = [
+    { width: 1920, suffix: '-xl' },
+    { width: 1280, suffix: '-lg' },
+    { width: 768, suffix: '-md' },
+    { width: 480, suffix: '-sm' }
+  ];
+
+  // Generate variations
+  for (const file of imageFiles) {
+    const inputPath = path.join(inputDir, file);
+    const basename = path.parse(file).name;
+
+    for (const folder of folders) {
+      for (const size of sizes) {
+        const outputPath = path.join(
+          outputDir,
+          folder,
+          `${basename}${size.suffix}.webp`
+        );
+
+        try {
+          await sharp(inputPath)
+            .resize(size.width, null, {
+              withoutEnlargement: true,
+              fit: 'inside'
+            })
+            .webp({ quality: 85 })
+            .toFile(outputPath);
+        } catch (err) {
+          console.error(`⚠️ Error on ${outputPath}:`, err.message);
+        }
+      }
+    }
+
+    console.log(`✅ ${file} processed`);
   }
 }
