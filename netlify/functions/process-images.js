@@ -162,15 +162,8 @@ async function addDirectoryToZip(zip, dirPath, zipPath) {
   }
 }
 
-// Generate images
+// Generate images - UN DOSSIER PAR IMAGE avec naming @1x, @2x, @3x, @4x
 async function generateImages(inputDir, outputDir) {
-  const folders = ['hero', 'features', 'gallery', 'thumbnails', 'backgrounds', 'icons', 'misc'];
-
-  // Create folders
-  for (const folder of folders) {
-    await fs.mkdir(path.join(outputDir, folder), { recursive: true });
-  }
-
   // Read images
   const files = await fs.readdir(inputDir);
   const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f));
@@ -181,32 +174,38 @@ async function generateImages(inputDir, outputDir) {
     throw new Error('No images found in uploaded files');
   }
 
-  // Sizes
+  // Sizes avec nouveau naming @1x, @2x, @3x, @4x
   const sizes = [
-    { width: 1920, suffix: '-xl' },
-    { width: 1280, suffix: '-lg' },
-    { width: 768, suffix: '-md' },
-    { width: 480, suffix: '-sm' }
+    { width: 480, suffix: '@1x', label: 'mobile' },
+    { width: 768, suffix: '@2x', label: 'tablet' },
+    { width: 1280, suffix: '@3x', label: 'desktop' },
+    { width: 1920, suffix: '@4x', label: 'large desktop' }
   ];
 
-  // Generate variations
+  // Generate variations - UN DOSSIER PAR IMAGE
   for (const file of imageFiles) {
     const inputPath = path.join(inputDir, file);
     const basename = path.parse(file).name;
 
-    for (const folder of folders) {
-      for (const size of sizes) {
-        const outputPath = path.join(outputDir, folder, `${basename}${size.suffix}.webp`);
+    // Créer un dossier pour cette image
+    const imageFolderPath = path.join(outputDir, basename);
+    await fs.mkdir(imageFolderPath, { recursive: true });
+    console.log(`📁 Creating folder: ${basename}/`);
 
-        await sharp(inputPath)
-          .resize(size.width, null, { withoutEnlargement: true, fit: 'inside' })
-          .webp({ quality: 85 })
-          .toFile(outputPath);
-      }
+    // Générer les 4 tailles dans ce dossier
+    for (const size of sizes) {
+      const outputPath = path.join(imageFolderPath, `${basename}${size.suffix}.webp`);
+
+      await sharp(inputPath)
+        .resize(size.width, null, { withoutEnlargement: true, fit: 'inside' })
+        .webp({ quality: 85 })
+        .toFile(outputPath);
+      
+      console.log(`  ✓ ${basename}${size.suffix}.webp (${size.width}px - ${size.label})`);
     }
 
-    console.log(`✅ ${file} processed`);
+    console.log(`✅ ${file} → 4 sizes generated`);
   }
 
-  console.log(`🎉 Generated ${imageFiles.length * folders.length * sizes.length} images`);
+  console.log(`🎉 Total: ${imageFiles.length} folders with ${sizes.length} sizes each`);
 }
