@@ -48,7 +48,7 @@ export const handler = async (event) => {
     await fs.mkdir(outputDir, { recursive: true });
 
     // Execute generate-images.cjs
-    const scriptPath = path.join(__dirname, '../../scripts/generate-images.cjs');
+    const scriptPath = '/var/task/scripts/generate-images.cjs';
     const generateImages = require(scriptPath);
     
     await generateImages(inputDir, outputDir);
