@@ -1,0 +1,9 @@
+{
+  "name": "image-batch-tool",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "sharp": "^0.33.2",
+    "adm-zip": "^0.5.10"
+  }
+}

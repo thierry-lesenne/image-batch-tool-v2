@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Générateur d'images DIAG-360</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .dropzone {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 60px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 20px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #4CAF50;
+      background: #f0f8f0;
+    }
+    .dropzone.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    input[type="file"] { display: none; }
+    button {
+      width: 100%;
+      padding: 15px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover:not(:disabled) { background: #45a049; }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      display: none;
+    }
+    .status.visible { display: block; }
+    .status.processing {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    .status.success {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    .file-info {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #555;
+    }
+    .download-link {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 10px 20px;
+      background: #2196F3;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .download-link:hover {
+      background: #1976D2;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 Générateur d'images DIAG-360</h1>
+    <p class="subtitle">Déposez un ZIP ou sélectionnez des images sources</p>
+    
+    <div class="dropzone" id="dropzone">
+      <p>📁 Glissez-déposez un fichier ZIP ici</p>
+      <p style="margin-top: 10px; color: #999; font-size: 14px;">ou cliquez pour sélectionner</p>
+      <input type="file" id="fileInput" accept=".zip,image/*" multiple>
+    </div>
+
+    <div class="file-info" id="fileInfo" style="display: none;"></div>
+
+    <button id="generateBtn" disabled>Générer les déclinaisons</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const generateBtn = document.getElementById('generateBtn');
+    const status = document.getElementById('status');
+    const fileInfo = document.getElementById('fileInfo');
+
+    let selectedFiles = null;
+
+    // Click to select
+    dropzone.addEventListener('click', () => {
+      if (!dropzone.classList.contains('disabled')) {
+        fileInput.click();
+      }
+    });
+
+    // File selection
+    fileInput.addEventListener('change', (e) => {
+      handleFiles(e.target.files);
+    });
+
+    // Drag & drop
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!dropzone.classList.contains('disabled')) {
+        dropzone.classList.add('dragover');
+      }
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (!dropzone.classList.contains('disabled')) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+
+    function handleFiles(files) {
+      if (files.length === 0) return;
+      
+      selectedFiles = files;
+      const fileList = Array.from(files).map(f => f.name).join(', ');
+      fileInfo.textContent = `✓ ${files.length} fichier(s) sélectionné(s): ${fileList}`;
+      fileInfo.style.display = 'block';
+      generateBtn.disabled = false;
+      hideStatus();
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      if (!selectedFiles) return;
+
+      showStatus('processing', '⏳ Génération en cours...');
+      generateBtn.disabled = true;
+      dropzone.classList.add('disabled');
+
+      const formData = new FormData();
+      for (let file of selectedFiles) {
+        formData.append('files', file);
+      }
+
+      try {
+        const response = await fetch('/api/process-images', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(error || 'Erreur serveur');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const filename = `diag360-images-${Date.now()}.zip`;
+
+        showStatus('success', `✅ Génération terminée !`, url, filename);
+
+      } catch (error) {
+        showStatus('error', `❌ Erreur : ${error.message}`);
+        generateBtn.disabled = false;
+        dropzone.classList.remove('disabled');
+      }
+    });
+
+    function showStatus(type, message, downloadUrl = null, filename = null) {
+      status.className = `status visible ${type}`;
+      status.innerHTML = message;
+      
+      if (downloadUrl) {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = filename;
+        link.className = 'download-link';
+        link.textContent = '⬇️ Télécharger le ZIP';
+        status.appendChild(document.createElement('br'));
+        status.appendChild(link);
+        
+        // Auto-download
+        link.click();
+      }
+    }
+
+    function hideStatus() {
+      status.className = 'status';
+    }
+  </script>
+</body>
+</html>
