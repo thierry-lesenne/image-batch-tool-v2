@@ -198,10 +198,12 @@
           body: formData
         });
 
-        if (!response.ok) {
-          const error = await response.text();
-          throw new Error(error || 'Erreur serveur');
-        }
+      if (!response.ok) {
+  const errorText = await response.text();
+  console.error('Response status:', response.status);
+  console.error('Response text:', errorText);
+  throw new Error(errorText || `Erreur serveur (${response.status})`);
+}
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -209,11 +211,21 @@
 
         showStatus('success', `✅ Génération terminée !`, url, filename);
 
-      } catch (error) {
-        showStatus('error', `❌ Erreur : ${error.message}`);
-        generateBtn.disabled = false;
-        dropzone.classList.remove('disabled');
-      }
+} catch (error) {
+  console.error('Full error:', error);
+  
+  // Try to get detailed error message
+  let errorMessage = error.message;
+  if (error.response) {
+    const errorText = await error.response.text();
+    console.error('Server response:', errorText);
+    errorMessage = errorText;
+  }
+  
+  showStatus('error', `❌ Erreur : ${errorMessage}`);
+  generateBtn.disabled = false;
+  dropzone.classList.remove('disabled');
+}
     });
 
     function showStatus(type, message, downloadUrl = null, filename = null) {
